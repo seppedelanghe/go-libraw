@@ -10,14 +10,11 @@ package golibraw
 import "C"
 
 import (
-	"bytes"
 	"fmt"
 	"image"
 	"log"
 	"time"
 	"unsafe"
-
-	"github.com/lmittmann/ppm"
 )
 
 type ImgMetadata struct {
@@ -103,41 +100,77 @@ func clearAndClose(proc *C.libraw_data_t, memImg *C.libraw_processed_image_t) {
 	C.libraw_close(proc)
 }
 
-// ConvertToImage decodes raw image bytes (assumed to be PPM data) into an image.Image.
-// It prepends a PPM header to the raw data.
+
 func ConvertToImage(data []byte, width, height, bits int) (image.Image, error) {
-	maxVal := (1 << bits) - 1
-	header := fmt.Sprintf("P6\n%d %d\n%d\n", width, height, maxVal)
-	fullBytes := append([]byte(header), data...)
-	return ppm.Decode(bytes.NewReader(fullBytes))
+    // Check if we have the expected amount of data for RGB
+    expectedSize := width * height * 3 // 3 bytes per pixel for RGB
+    if len(data) != expectedSize {
+        return nil, fmt.Errorf("unexpected data size: got %d, want %d", len(data), expectedSize)
+    }
+
+    // Create a new RGB image
+    img := image.NewRGBA(image.Rect(0, 0, width, height))
+    
+    // Convert the raw RGB data to RGBA
+    for y := 0; y < height; y++ {
+        for x := 0; x < width; x++ {
+            offset := (y*width + x) * 3 // 3 bytes per pixel in source
+            r := data[offset]
+            g := data[offset+1]
+            b := data[offset+2]
+            
+            // Set pixel in the RGBA image
+            dstOffset := (y*width + x) * 4 // 4 bytes per pixel in RGBA
+            img.Pix[dstOffset] = r
+            img.Pix[dstOffset+1] = g
+            img.Pix[dstOffset+2] = b
+            img.Pix[dstOffset+3] = 255 // Alpha channel
+        }
+    }
+    
+    return img, nil
 }
 
 // ProcessRaw processes a RAW file and returns an image.Image along with metadata.
 func (p *Processor) ProcessRaw(filepath string) (img image.Image, meta ImgMetadata, err error) {
-	t0 := time.Now()
+    t0 := time.Now()
 
-	proc, dataPtr, dataSize, height, width, bits, err := p.processFile(filepath)
-	if err != nil {
-		return nil, ImgMetadata{}, err
-	}
-	defer clearAndClose(proc, dataPtr)
+    proc, dataPtr, dataSize, height, width, bits, err := p.processFile(filepath)
+    if err != nil {
+        return nil, ImgMetadata{}, err
+    }
+    defer clearAndClose(proc, dataPtr)
 
-	dataBytes := C.GoBytes(unsafe.Pointer(&dataPtr.data[0]), C.int(dataSize))
+    // Convert raw bytes to Go slice
+    dataBytes := C.GoBytes(unsafe.Pointer(&dataPtr.data[0]), C.int(dataSize))
 
-	img, err = ConvertToImage(dataBytes, int(width), int(height), int(bits))
-	if err != nil {
-		return nil, ImgMetadata{}, err
-	}
+    // Handle different bit depths
+    if bits > 8 {
+        // Convert higher bit depth to 8-bit
+        adjustedData := make([]byte, width*height*3)
+        for i := 0; i < len(dataBytes); i += 2 {
+            // Combine two bytes into one, shifting to 8-bit depth
+            if i+1 < len(dataBytes) {
+                value := uint16(dataBytes[i]) | (uint16(dataBytes[i+1]) << 8)
+                adjustedData[i/2] = byte(value >> (bits - 8))
+            }
+        }
+        dataBytes = adjustedData
+    }
 
-	other := C.libraw_get_imgother(proc)
-	timestamp := int64(other.timestamp)
-	captureTime := time.Unix(timestamp, 0)
+    img, err = ConvertToImage(dataBytes, int(width), int(height), 8)
+    if err != nil {
+        return nil, ImgMetadata{}, fmt.Errorf("convert to image: %v", err)
+    }
 
-	meta = ImgMetadata{
-		ScattoTimestamp: timestamp,
-		ScattoDataOra:   captureTime.Format("2006-01-02T15:04:05"),
-	}
-	log.Printf("Processed RAW %s in %v", filepath, time.Since(t0))
-	return img, meta, nil
+    other := C.libraw_get_imgother(proc)
+    timestamp := int64(other.timestamp)
+    captureTime := time.Unix(timestamp, 0)
+
+    meta = ImgMetadata{
+        ScattoTimestamp: timestamp,
+        ScattoDataOra:   captureTime.Format("2006-01-02T15:04:05"),
+    }
+    log.Printf("Processed RAW %s in %v", filepath, time.Since(t0))
+    return img, meta, nil
 }
-
