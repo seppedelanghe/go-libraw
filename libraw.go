@@ -18,8 +18,8 @@ import (
 )
 
 type ImgMetadata struct {
-	ScattoTimestamp int64  // capture timestamp
-	ScattoDataOra   string // formatted capture date/time
+	CaptureTimestamp int64
+	CaptureDate time.Time
 }
 
 type ProcessorOptions struct {}
@@ -168,9 +168,10 @@ func (p *Processor) ProcessRaw(filepath string) (img image.Image, meta ImgMetada
     captureTime := time.Unix(timestamp, 0)
 
     meta = ImgMetadata{
-        ScattoTimestamp: timestamp,
-        ScattoDataOra:   captureTime.Format("2006-01-02T15:04:05"),
+		CaptureTimestamp: timestamp,
+        CaptureDate: captureTime,
     }
     log.Printf("Processed RAW %s in %v", filepath, time.Since(t0))
     return img, meta, nil
 }
+
