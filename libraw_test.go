@@ -2,57 +2,62 @@ package golibraw
 
 import (
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 )
 
-// sampleRawPath should point to a RAW file (e.g., NEF, CR2, etc.)
-const sampleRawPath = "testdata/sample.NEF"
+const testPath = "./testdata"
+
+func getAllFilesInTestDir() []string {
+	entries, err := os.ReadDir(testPath)
+	if err != nil {
+		panic(err)
+	}
+	paths := make([]string, len(entries))
+	for i, e := range entries {
+		paths[i] = filepath.Join(testPath, e.Name())
+	}
+	return paths
+}
 
 // TestProcessRaw uses ProcessRaw to decode the RAW file into an image.Image and checks the metadata.
 func TestProcessRaw(t *testing.T) {
-	// Skip the test if the sample file doesn't exist.
-	if _, err := os.Stat(sampleRawPath); os.IsNotExist(err) {
-		t.Skipf("Skipping test because sample RAW file %s does not exist", sampleRawPath)
-	}
-
 	processor := NewProcessor(ProcessorOptions{})
 
-	img, meta, err := processor.ProcessRaw(sampleRawPath)
-	if err != nil {
-		t.Fatalf("ProcessRaw failed: %v", err)
-	}
-	if img == nil {
-		t.Fatal("ProcessRaw returned a nil image")
-	}
+	for _, path := range getAllFilesInTestDir() {
+		img, meta, err := processor.ProcessRaw(path)
+		if err != nil {
+			t.Fatalf("ProcessRaw failed: %v", err)
+		}
+		if img == nil {
+			t.Fatal("ProcessRaw returned a nil image")
+		}
 
-	if meta.ScattoTimestamp == 0 || meta.ScattoDataOra == "" {
-		t.Error("ProcessRaw returned invalid metadata")
-	}
+		bounds := img.Bounds()
+		if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
+			t.Errorf("Invalid image dimensions: %v", bounds)
+		}
 
-	bounds := img.Bounds()
-	if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
-		t.Errorf("Invalid image dimensions: %v", bounds)
+		if meta.CaptureTimestamp == 0 || meta.CaptureDate.IsZero() {
+			t.Error("ProcessRaw returned invalid metadata")
+		}
 	}
 }
 
 
 // TestConcurrentProcessRaw runs ProcessRaw concurrently in multiple goroutines.
 func TestConcurrentProcessRaw(t *testing.T) {
-	if _, err := os.Stat(sampleRawPath); os.IsNotExist(err) {
-		t.Skipf("Skipping test because sample RAW file %s does not exist", sampleRawPath)
-	}
-
 	processor := NewProcessor(ProcessorOptions{})
 
-	const numRoutines = 5
+	paths := getAllFilesInTestDir()
 	var wg sync.WaitGroup
-	wg.Add(numRoutines)
+	wg.Add(len(paths))
 
-	for i := 0; i < numRoutines; i++ {
+	for i, path := range getAllFilesInTestDir() {
 		go func(idx int) {
 			defer wg.Done()
-			img, meta, err := processor.ProcessRaw(sampleRawPath)
+			img, meta, err := processor.ProcessRaw(path)
 			if err != nil {
 				t.Errorf("Goroutine %d: ProcessRaw failed: %v", idx, err)
 				return
@@ -60,7 +65,7 @@ func TestConcurrentProcessRaw(t *testing.T) {
 			if img == nil {
 				t.Errorf("Goroutine %d: returned nil image", idx)
 			}
-			if meta.ScattoTimestamp == 0 || meta.ScattoDataOra == "" {
+			if meta.CaptureTimestamp == 0 || meta.CaptureDate.IsZero() {
 				t.Errorf("Goroutine %d: returned invalid metadata", idx)
 			}
 		}(i)
