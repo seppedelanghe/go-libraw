@@ -122,7 +122,7 @@ func (p *Processor) ProcessRaw(filepath string) (img image.Image, meta ImgMetada
 	}
 	defer clearAndClose(proc, dataPtr)
 
-	dataBytes := C.GoBytes(unsafe.Pointer(&dataPtr), C.int(dataSize))
+	dataBytes := C.GoBytes(unsafe.Pointer(&dataPtr.data[0]), C.int(dataSize))
 
 	img, err = ConvertToImage(dataBytes, int(width), int(height), int(bits))
 	if err != nil {
