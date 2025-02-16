@@ -7,6 +7,35 @@ After doing some searching I only found some older wrappers that have been inact
 
 I use MacOS with a M1 Pro chip, so this is only tested (for now) on ARM.
 
+## Install
+`go get github.com/seppedelanghe/go-libraw@v0.1.8`
+
+## Options:
+```
+type ProcessorOptions struct {
+	DisableAutoBright bool
+
+	UseAutoWB bool
+	UseCameraWB bool
+	
+	AdustBrightness bool
+	AdjustedBrightness float64
+	
+	CorrectExposure bool
+	ExposureShift float64
+
+	UseCameraMatrix bool
+
+	OverrideOutputColour bool
+	OutputColourConversion OutputColour
+
+	OutputBps int32
+	ClipHighlights bool
+
+	LinearGamma bool
+}
+```
+
 ## Building
 When using MacOS with an M1/M2:
 ```
