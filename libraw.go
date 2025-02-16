@@ -22,9 +22,32 @@ type ImgMetadata struct {
 	CaptureDate time.Time
 }
 
+type OutputColour uint8
+
+const (
+	Raw OutputColour = iota
+	sRGB
+	AdobeRGB
+	WideGamutRGB
+	ProPhotoRGB
+	XYZ
+)
+
+
 type ProcessorOptions struct {
 	DisableAutoBright bool
 	UseCameraWB bool
+	
+	AdustBrightness bool
+	AdjustedBrightness float64
+	
+	CorrectExposure bool
+	ExposureShift float64
+
+	UseCameraMatrix bool
+
+	OverrideOutputColour bool
+	OutputColourConversion OutputColour
 }
 
 // Processor is a stateless wrapper for libraw processing.
@@ -56,11 +79,28 @@ func (p *Processor) processFile(filepath string) (proc *C.libraw_data_t, memImg 
 	}
 
 	if p.options.UseCameraWB {
-		proc.params.use_camera_wb = C.int(1)
+		proc.params.use_camera_wb = 1
 	}
 
 	if p.options.DisableAutoBright {
-		proc.params.no_auto_bright = C.int(1)
+		proc.params.no_auto_bright = 1
+	}
+
+	if p.options.AdustBrightness {
+		proc.params.bright = C.float(p.options.AdjustedBrightness)
+	}
+
+	if p.options.CorrectExposure {
+		proc.params.exp_correc = 1
+		proc.params.exp_shift = C.float(p.options.ExposureShift)
+	}
+
+	if p.options.UseCameraMatrix {
+		proc.params.use_camera_matrix = 1
+	}
+
+	if p.options.OverrideOutputColour {
+		proc.params.output_color = C.int(p.options.OutputColourConversion)
 	}
 
 	cFile := C.CString(filepath)
