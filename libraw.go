@@ -26,7 +26,7 @@ type OutputColour uint8
 
 const (
 	Raw OutputColour = iota
-	sRGB
+	SRGB
 	AdobeRGB
 	WideGamutRGB
 	ProPhotoRGB
