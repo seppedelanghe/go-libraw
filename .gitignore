@@ -7,3 +7,6 @@
 *.CR2
 *.jpg
 *.jpeg
+
+# MacOS
+.DS_Store

@@ -22,7 +22,10 @@ type ImgMetadata struct {
 	CaptureDate time.Time
 }
 
-type ProcessorOptions struct {}
+type ProcessorOptions struct {
+	DisableAutoBright bool
+	UseCameraWB bool
+}
 
 // Processor is a stateless wrapper for libraw processing.
 // Each method creates its own libraw processor so that calls are goroutine‐safe.
@@ -50,6 +53,14 @@ func (p *Processor) processFile(filepath string) (proc *C.libraw_data_t, memImg 
 	if proc == nil {
 		err = fmt.Errorf("failed to initialize libraw")
 		return
+	}
+
+	if p.options.UseCameraWB {
+		proc.params.use_camera_wb = C.int(1)
+	}
+
+	if p.options.DisableAutoBright {
+		proc.params.no_auto_bright = C.int(1)
 	}
 
 	cFile := C.CString(filepath)
@@ -151,7 +162,7 @@ func (p *Processor) ProcessRaw(filepath string) (img image.Image, meta ImgMetada
         for i := 0; i < len(dataBytes); i += 2 {
             // Combine two bytes into one, shifting to 8-bit depth
             if i+1 < len(dataBytes) {
-                value := uint16(dataBytes[i]) | (uint16(dataBytes[i+1]) << 8)
+				value := (uint16(dataBytes[i]) << 8) | uint16(dataBytes[i+1])
                 adjustedData[i/2] = byte(value >> (bits - 8))
             }
         }
