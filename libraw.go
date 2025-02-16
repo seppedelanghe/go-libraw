@@ -36,6 +36,8 @@ const (
 
 type ProcessorOptions struct {
 	DisableAutoBright bool
+
+	UseAutoWB bool
 	UseCameraWB bool
 	
 	AdustBrightness bool
@@ -76,6 +78,10 @@ func (p *Processor) processFile(filepath string) (proc *C.libraw_data_t, memImg 
 	if proc == nil {
 		err = fmt.Errorf("failed to initialize libraw")
 		return
+	}
+
+	if p.options.UseAutoWB {
+		proc.params.use_auto_wb = 1
 	}
 
 	if p.options.UseCameraWB {
