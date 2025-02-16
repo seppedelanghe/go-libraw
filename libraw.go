@@ -50,6 +50,11 @@ type ProcessorOptions struct {
 
 	OverrideOutputColour bool
 	OutputColourConversion OutputColour
+
+	OutputBps int32
+	ClipHighlights bool
+
+	LinearGamma bool
 }
 
 // Processor is a stateless wrapper for libraw processing.
@@ -60,6 +65,9 @@ type Processor struct {
 }
 
 func NewProcessor(opts ProcessorOptions) *Processor {
+	if opts.OutputBps != 8 || opts.OutputBps != 16 {
+		opts.OutputBps = 8
+	}
 	return &Processor{options: opts}
 }
 
@@ -79,6 +87,8 @@ func (p *Processor) processFile(filepath string) (proc *C.libraw_data_t, memImg 
 		err = fmt.Errorf("failed to initialize libraw")
 		return
 	}
+
+	proc.params.output_bps = C.int(p.options.OutputBps)
 
 	if p.options.UseAutoWB {
 		proc.params.use_auto_wb = 1
@@ -107,6 +117,15 @@ func (p *Processor) processFile(filepath string) (proc *C.libraw_data_t, memImg 
 
 	if p.options.OverrideOutputColour {
 		proc.params.output_color = C.int(p.options.OutputColourConversion)
+	}
+
+	if p.options.ClipHighlights {
+		proc.params.highlight = 1
+	}
+
+	if p.options.LinearGamma {
+		proc.params.gamm[0] = 1.0
+		proc.params.gamm[1] = 1.0
 	}
 
 	cFile := C.CString(filepath)
