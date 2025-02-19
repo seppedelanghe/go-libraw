@@ -23,7 +23,7 @@ func getAllFilesInTestDir() []string {
 
 // TestProcessRaw uses ProcessRaw to decode the RAW file into an image.Image and checks the metadata.
 func TestProcessRaw(t *testing.T) {
-	processor := NewProcessor(ProcessorOptions{})
+	processor := NewProcessor(NewProcessorOptions())
 
 	for _, path := range getAllFilesInTestDir() {
 		img, meta, err := processor.ProcessRaw(path)
@@ -48,7 +48,7 @@ func TestProcessRaw(t *testing.T) {
 
 // TestConcurrentProcessRaw runs ProcessRaw concurrently in multiple goroutines.
 func TestConcurrentProcessRaw(t *testing.T) {
-	processor := NewProcessor(ProcessorOptions{})
+	processor := NewProcessor(NewProcessorOptions())
 
 	paths := getAllFilesInTestDir()
 	var wg sync.WaitGroup

@@ -22,10 +22,10 @@ type ImgMetadata struct {
 	CaptureDate time.Time
 }
 
-type OutputColour uint8
+type OutputColor uint8
 
 const (
-	Raw OutputColour = iota
+	Raw OutputColor = iota
 	SRGB
 	AdobeRGB
 	WideGamutRGB
@@ -34,28 +34,237 @@ const (
 )
 
 
+type Box struct {
+	X1 uint
+	X2 uint
+	Y1 uint
+	Y2 uint
+}
+
+func (b *Box) toC() [4]C.uint {
+    return [4]C.uint{C.uint(b.X1), C.uint(b.Y1), C.uint(b.X2), C.uint(b.Y2)}
+}
+
+func (b *Box) IsEmpty() bool {
+	return b.X1 == 0 && b.Y1 == 0 && b.X2 == 0 && b.Y2 == 0
+}
+
 type ProcessorOptions struct {
-	DisableAutoBright bool
+	Greybox Box
+	Cropbox Box
+	Aber [4]float64
+	Gamm [6]float64
+	UserMul [4]float32
+	Bright float32
+	Threshold float32 // threshold for wavelet denoising
 
-	UseAutoWB bool
-	UseCameraWB bool
-	
-	AdustBrightness bool
-	AdjustedBrightness float64
-	
-	CorrectExposure bool
-	ExposureShift float64
-
+	HalfSize bool
+	FourColorRGB bool
+	Highlight bool
+	UseAutoWb bool
+	UseCameraWb bool
 	UseCameraMatrix bool
 
-	OverrideOutputColour bool
-	OutputColourConversion OutputColour
-
-	OutputBps int32
-	ClipHighlights bool
-
-	LinearGamma bool
+	OutputColor OutputColor
+	
+	OutputProfile string
+	CameraProfile string
+	BadPixels string
+	DarkFrame string
+	
+	OutputBps int // 8 or 16
+	OutputTiff bool
+	OutputFlags int
+	UserFlip int // EXIF rotation flags -> 0 = no rotation
+	UserQual int // Interpolaton -> 0 = Linear, 1 = VNG, 2 = PPG, 3 = AHD
+	UserBlack int
+	UserCblack [4]int // per-channel black level offsets
+	UserSat int // Saturation
+	MedPasses int // median filter passes for noise reduction
+	AutoBrightThr float32 // Threshold for auto-brightness correction
+	AdjustMaximumThr float32 // Threshold for adjusting maximum brigtness value in auto-exposure calculations
+	NoAutoBright bool // 0 = enable auto-brightness, 1 = disabled
+	UseFujiRotate bool // 1 apply Fuji sensor rotation
+	GreenMatching bool // Enable green channel equalization
+	DcbIterations int
+	DcbEnhanceFl bool
+	FbddNoiserd bool // Enable noise reduction using Frequency based denoising and deblurring
+	ExpCorrect bool
+	ExpShift float32
+	ExpPreser float32
+	NoAutoScale bool
+	NoInterpolation bool
 }
+
+func (opts *ProcessorOptions) bool(v bool) C.int {
+	if v {
+		return C.int(1)
+	}
+	return C.int(0)
+}
+
+func (opts *ProcessorOptions) Apply(params C.libraw_output_params_t) C.libraw_output_params_t {
+	if !opts.Greybox.IsEmpty() {
+		params.greybox = opts.Greybox.toC()
+	}
+	if !opts.Cropbox.IsEmpty() {
+		params.cropbox = opts.Cropbox.toC()
+	}
+
+	params.aber = [4]C.double{
+		C.double(opts.Aber[0]),
+		C.double(opts.Aber[1]),
+		C.double(opts.Aber[2]),
+		C.double(opts.Aber[3]),
+	}
+	params.gamm = [6]C.double{
+		C.double(opts.Gamm[0]),
+		C.double(opts.Gamm[1]),
+		C.double(opts.Gamm[2]),
+		C.double(opts.Gamm[3]),
+		C.double(opts.Gamm[4]),
+		C.double(opts.Gamm[5]),
+	}
+	params.user_mul = [4]C.float{
+		C.float(opts.UserMul[0]),
+		C.float(opts.UserMul[1]),
+		C.float(opts.UserMul[2]),
+		C.float(opts.UserMul[3]),
+	}
+	params.bright = C.float(opts.Bright)
+	params.threshold = C.float(opts.Threshold)
+
+	// bool => C.int
+	params.half_size = opts.bool(opts.HalfSize)
+	params.four_color_rgb = opts.bool(opts.FourColorRGB)
+	params.highlight = opts.bool(opts.Highlight)
+	params.use_auto_wb = opts.bool(opts.UseAutoWb)
+	params.use_camera_wb = opts.bool(opts.UseCameraWb)
+	params.use_camera_matrix = opts.bool(opts.UseCameraMatrix)
+
+	params.output_color = C.int(opts.OutputColor)
+
+	// Free me :)
+	if opts.OutputProfile != "" {
+		params.output_profile = C.CString(opts.OutputProfile)
+	}
+
+	if opts.CameraProfile != "" {
+		params.camera_profile = C.CString(opts.CameraProfile)
+	}
+
+	if opts.BadPixels != "" {
+		params.bad_pixels = C.CString(opts.BadPixels)
+	}
+
+	if opts.DarkFrame != "" {
+		params.dark_frame = C.CString(opts.DarkFrame)
+	}
+
+	params.output_bps = C.int(opts.OutputBps)
+	params.output_tiff = opts.bool(opts.OutputTiff)
+	params.output_flags = C.int(opts.OutputFlags)
+
+	params.user_flip = C.int(opts.UserFlip)
+	params.user_qual = C.int(opts.UserQual)
+	params.user_black = C.int(opts.UserBlack)
+	params.user_cblack = [4]C.int{
+		C.int(opts.UserCblack[0]),
+		C.int(opts.UserCblack[1]),
+		C.int(opts.UserCblack[2]),
+		C.int(opts.UserCblack[3]),
+	}
+	params.user_sat = C.int(opts.UserSat)
+	params.med_passes = C.int(opts.MedPasses)
+	params.auto_bright_thr = C.float(opts.AutoBrightThr)
+	params.adjust_maximum_thr = C.float(opts.AdjustMaximumThr)
+	params.no_auto_bright = opts.bool(opts.NoAutoBright)
+	params.use_fuji_rotate = opts.bool(opts.UseFujiRotate)
+	params.green_matching = opts.bool(opts.GreenMatching)
+	params.dcb_iterations = C.int(opts.DcbIterations)
+	params.dcb_enhance_fl = opts.bool(opts.DcbEnhanceFl)
+	params.fbdd_noiserd = opts.bool(opts.FbddNoiserd)
+	params.exp_correc = opts.bool(opts.ExpCorrect)
+	params.exp_shift = C.float(opts.ExpShift)
+	params.exp_preser = C.float(opts.ExpPreser)
+	params.no_auto_scale = opts.bool(opts.NoAutoScale)
+	params.no_interpolation = opts.bool(opts.NoInterpolation)
+
+	return params
+}
+
+
+func (opts *ProcessorOptions) Free(params C.libraw_output_params_t) {
+	if opts.OutputProfile != "" {
+		C.free(unsafe.Pointer(params.output_profile))
+	}
+
+	if opts.CameraProfile != "" {
+		C.free(unsafe.Pointer(params.camera_profile))
+	}
+
+	if opts.BadPixels != "" {
+		C.free(unsafe.Pointer(params.bad_pixels))
+	}
+
+	if opts.DarkFrame != "" {
+		C.free(unsafe.Pointer(params.dark_frame))
+	}
+
+
+}
+
+// NewProcessorOptions creates a ProcessorOptions struct with the default values from LibRaw
+func NewProcessorOptions() ProcessorOptions {
+	return ProcessorOptions{
+		Greybox:  Box{0, 0, 0, 0},
+		Cropbox:  Box{0, 0, 0, 0},
+		Aber:     [4]float64{1.0, 1.0, 1.0, 1.0},
+		Gamm:     [6]float64{0.45, 4.5, 0.0, 0.0, 0.0, 0.0}, // Default gamma 1/2.2 = 0.45
+		UserMul:  [4]float32{0.0, 0.0, 0.0, 0.0},            // 0.0 means use camera white balance
+		Bright:   1.0, // Default brightness multiplier
+		Threshold: 0.0, // No wavelet denoising by default
+
+		// Boolean settings
+		HalfSize:          false,
+		FourColorRGB:      false,
+		Highlight:         false,
+		UseAutoWb:         false,
+		UseCameraWb:       false, // Use camera white balance by default
+		UseCameraMatrix:   true, // Use camera color matrix by default
+
+		OutputColor: 1, // sRGB is default
+		OutputProfile: "", // Empty means use default
+		CameraProfile: "",
+		BadPixels: "",
+		DarkFrame: "",
+
+		OutputBps:    8, // 8-bit per channel by default
+		OutputTiff:   false,
+		OutputFlags:  0,
+		UserFlip:     -1, // No rotation
+		UserQual:     -1, // Default interpolation: AHD (Adaptive Homogeneity-Directed)
+		UserBlack:    -1,
+		UserCblack:   [4]int{0, 0, 0, 0}, // Per-channel black level offsets
+		UserSat:      -1, // Use LibRaw default saturation
+
+		MedPasses:          0,   // No median filtering by default
+		AutoBrightThr:      0.01, // Default auto-brightness threshold
+		AdjustMaximumThr:   0.75, // No adjustment to maximum brightness
+		NoAutoBright:       false,
+		UseFujiRotate:      true,
+		GreenMatching:      false,
+		DcbIterations:      0,
+		DcbEnhanceFl:       false,
+		FbddNoiserd:        false,
+		ExpCorrect:         false,
+		ExpShift:           1.0,
+		ExpPreser:          0.0,
+		NoAutoScale:        false,
+		NoInterpolation:    false,
+	}
+}
+
 
 // Processor is a stateless wrapper for libraw processing.
 // Each method creates its own libraw processor so that calls are goroutine‐safe.
@@ -65,9 +274,6 @@ type Processor struct {
 }
 
 func NewProcessor(opts ProcessorOptions) *Processor {
-	if opts.OutputBps != 8 || opts.OutputBps != 16 {
-		opts.OutputBps = 8
-	}
 	return &Processor{options: opts}
 }
 
@@ -88,45 +294,8 @@ func (p *Processor) processFile(filepath string) (proc *C.libraw_data_t, memImg 
 		return
 	}
 
-	proc.params.output_bps = C.int(p.options.OutputBps)
-
-	if p.options.UseAutoWB {
-		proc.params.use_auto_wb = 1
-	}
-
-	if p.options.UseCameraWB {
-		proc.params.use_camera_wb = 1
-	}
-
-	if p.options.DisableAutoBright {
-		proc.params.no_auto_bright = 1
-	}
-
-	if p.options.AdustBrightness {
-		proc.params.bright = C.float(p.options.AdjustedBrightness)
-	}
-
-	if p.options.CorrectExposure {
-		proc.params.exp_correc = 1
-		proc.params.exp_shift = C.float(p.options.ExposureShift)
-	}
-
-	if p.options.UseCameraMatrix {
-		proc.params.use_camera_matrix = 1
-	}
-
-	if p.options.OverrideOutputColour {
-		proc.params.output_color = C.int(p.options.OutputColourConversion)
-	}
-
-	if p.options.ClipHighlights {
-		proc.params.highlight = 1
-	}
-
-	if p.options.LinearGamma {
-		proc.params.gamm[0] = 1.0
-		proc.params.gamm[1] = 1.0
-	}
+	proc.params = p.options.Apply(proc.params)
+	defer p.options.Free(proc.params)
 
 	cFile := C.CString(filepath)
 	defer freeCString(cFile)

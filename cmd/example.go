@@ -8,10 +8,10 @@ import (
 )
 
 
-const RawPath = "testdata/sample.NEF"
+const RawPath = "testdata/_SPC2147.NEF"
 
 func main() {
-	processor := libraw.NewProcessor(libraw.ProcessorOptions{})
+	processor := libraw.NewProcessor(libraw.NewProcessorOptions())
 	img, _, err := processor.ProcessRaw(RawPath)
 	if err != nil {
 		panic(err)
