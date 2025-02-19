@@ -31,14 +31,18 @@ const (
 	WideGamutRGB
 	ProPhotoRGB
 	XYZ
+	ACES
+	DciP3
+	Rec2020
 )
 
 
 type Box struct {
-	X1 uint
-	X2 uint
-	Y1 uint
-	Y2 uint
+	X1 uint // x1 or x
+	Y1 uint // y1 or y
+
+	X2 uint // x2 or w
+	Y2 uint // y2 or h
 }
 
 func (b *Box) toC() [4]C.uint {
@@ -50,31 +54,31 @@ func (b *Box) IsEmpty() bool {
 }
 
 type ProcessorOptions struct {
-	Greybox Box
-	Cropbox Box
-	Aber [4]float64
-	Gamm [6]float64
-	UserMul [4]float32
+	Greybox Box // coordinates (in pixels) of the rectangle that is used to calculate the white balance
+	Cropbox Box // image cropping re ctangle
+	Aber [4]float64 // correction of chromatic aberrations
+	Gamm [6]float64 // user gamma-curve
+	UserMul [4]float32 // 4 multipliers (r,g,b,g) of the user's white balance
 	Bright float32
 	Threshold float32 // threshold for wavelet denoising
 
-	HalfSize bool
-	FourColorRGB bool
-	Highlight bool
+	HalfSize bool // output image at 50% size
+	FourColorRGB bool // switches on separate interpolations for two green components
+	Highlight int // 0-9: Highlight mode (0=clip, 1=unclip, 2=blend, 3+=rebuild)
 	UseAutoWb bool
 	UseCameraWb bool
-	UseCameraMatrix bool
+	UseCameraMatrix int
 
 	OutputColor OutputColor
 	
-	OutputProfile string
-	CameraProfile string
-	BadPixels string
-	DarkFrame string
+	OutputProfile string // path to output profile ICC file
+	CameraProfile string // path to input profile ICC file, or 'embed' for embedded profile
+	BadPixels string // path to bad pixels map file
+	DarkFrame string // path to dark frame file
 	
 	OutputBps int // 8 or 16
 	OutputTiff bool
-	OutputFlags int
+	OutputFlags int // Bitfield that allows to set output file options
 	UserFlip int // EXIF rotation flags -> 0 = no rotation
 	UserQual int // Interpolaton -> 0 = Linear, 1 = VNG, 2 = PPG, 3 = AHD
 	UserBlack int
@@ -88,7 +92,7 @@ type ProcessorOptions struct {
 	GreenMatching bool // Enable green channel equalization
 	DcbIterations int
 	DcbEnhanceFl bool
-	FbddNoiserd bool // Enable noise reduction using Frequency based denoising and deblurring
+	FbddNoiserd int // 0 = do not use, 1 = light reduction, 2 full reduction
 	ExpCorrect bool
 	ExpShift float32
 	ExpPreser float32
@@ -137,10 +141,10 @@ func (opts *ProcessorOptions) Apply(params C.libraw_output_params_t) C.libraw_ou
 	// bool => C.int
 	params.half_size = opts.bool(opts.HalfSize)
 	params.four_color_rgb = opts.bool(opts.FourColorRGB)
-	params.highlight = opts.bool(opts.Highlight)
+	params.highlight = C.int(opts.Highlight)
 	params.use_auto_wb = opts.bool(opts.UseAutoWb)
 	params.use_camera_wb = opts.bool(opts.UseCameraWb)
-	params.use_camera_matrix = opts.bool(opts.UseCameraMatrix)
+	params.use_camera_matrix = C.int(opts.UseCameraMatrix)
 
 	params.output_color = C.int(opts.OutputColor)
 
@@ -183,7 +187,7 @@ func (opts *ProcessorOptions) Apply(params C.libraw_output_params_t) C.libraw_ou
 	params.green_matching = opts.bool(opts.GreenMatching)
 	params.dcb_iterations = C.int(opts.DcbIterations)
 	params.dcb_enhance_fl = opts.bool(opts.DcbEnhanceFl)
-	params.fbdd_noiserd = opts.bool(opts.FbddNoiserd)
+	params.fbdd_noiserd = C.int(opts.FbddNoiserd)
 	params.exp_correc = opts.bool(opts.ExpCorrect)
 	params.exp_shift = C.float(opts.ExpShift)
 	params.exp_preser = C.float(opts.ExpPreser)
@@ -220,43 +224,42 @@ func NewProcessorOptions() ProcessorOptions {
 		Greybox:  Box{0, 0, 0, 0},
 		Cropbox:  Box{0, 0, 0, 0},
 		Aber:     [4]float64{1.0, 1.0, 1.0, 1.0},
-		Gamm:     [6]float64{0.45, 4.5, 0.0, 0.0, 0.0, 0.0}, // Default gamma 1/2.2 = 0.45
-		UserMul:  [4]float32{0.0, 0.0, 0.0, 0.0},            // 0.0 means use camera white balance
-		Bright:   1.0, // Default brightness multiplier
-		Threshold: 0.0, // No wavelet denoising by default
+		Gamm:     [6]float64{0.45, 4.5, 0.0, 0.0, 0.0, 0.0},
+		UserMul:  [4]float32{0.0, 0.0, 0.0, 0.0},
+		Bright:   1.0,
+		Threshold: 0.0,
 
-		// Boolean settings
 		HalfSize:          false,
 		FourColorRGB:      false,
-		Highlight:         false,
+		Highlight:         0,
 		UseAutoWb:         false,
-		UseCameraWb:       false, // Use camera white balance by default
-		UseCameraMatrix:   true, // Use camera color matrix by default
+		UseCameraWb:       false,
+		UseCameraMatrix:   1,
 
-		OutputColor: 1, // sRGB is default
-		OutputProfile: "", // Empty means use default
+		OutputColor: 1,
+		OutputProfile: "",
 		CameraProfile: "",
 		BadPixels: "",
 		DarkFrame: "",
 
-		OutputBps:    8, // 8-bit per channel by default
+		OutputBps:    8,
 		OutputTiff:   false,
 		OutputFlags:  0,
-		UserFlip:     -1, // No rotation
-		UserQual:     -1, // Default interpolation: AHD (Adaptive Homogeneity-Directed)
+		UserFlip:     -1,
+		UserQual:     -1,
 		UserBlack:    -1,
-		UserCblack:   [4]int{0, 0, 0, 0}, // Per-channel black level offsets
-		UserSat:      -1, // Use LibRaw default saturation
+		UserCblack:   [4]int{0, 0, 0, 0},
+		UserSat:      -1,
 
-		MedPasses:          0,   // No median filtering by default
-		AutoBrightThr:      0.01, // Default auto-brightness threshold
-		AdjustMaximumThr:   0.75, // No adjustment to maximum brightness
+		MedPasses:          0,
+		AutoBrightThr:      0.01,
+		AdjustMaximumThr:   0.75,
 		NoAutoBright:       false,
 		UseFujiRotate:      true,
 		GreenMatching:      false,
 		DcbIterations:      0,
 		DcbEnhanceFl:       false,
-		FbddNoiserd:        false,
+		FbddNoiserd:        0,
 		ExpCorrect:         false,
 		ExpShift:           1.0,
 		ExpPreser:          0.0,
