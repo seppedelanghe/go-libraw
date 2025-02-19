@@ -8,7 +8,7 @@ After doing some searching I only found some older wrappers that have been inact
 I use MacOS with a M1 Pro chip, so this is only tested (for now) on ARM.
 
 ## Install
-`go get github.com/seppedelanghe/go-libraw@v0.1.8`
+`go get github.com/seppedelanghe/go-libraw@v0.2.0`
 
 ## Options
 The LibRaw output params are passed to LibRaw using the `ProcessorOptions` struct. More information about LibRaw Output params can be found [here](https://www.libraw.org/docs/API-datastruct-eng.html#libraw_output_params_t)
@@ -23,15 +23,22 @@ brew install libraw
 go build .
 ```
 
-Other OS: (not tested)
-1. Install libraw
-2. Update the `#cgo` flags to point `libraw`
+Other OS: (x86/x64 not tested)
+1. Install libraw -> eg. `apt install libraw-dev`
+2. (optional) Update the `#cgo` flags to point the correct directory for `libraw` 
 3. Run `go build .`
+
+### Tested on:
+- MacOS 13
+- Ubuntu 24.04 ARM
+
+## Tests
+Running tests can be done using `go test -v .`
 
 ## Example usage
 ```
 const pathToRawFile = "./dir/file.NEF"
-processor := libraw.NewProcessor(libraw.ProcessorOptions{})
+processor := libraw.NewProcessor(libraw.NewProcessorOptions())
 img, metadata, err := processor.ProcessRaw(pathToRawFile)
 // handle err...
 ```
