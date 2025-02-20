@@ -1,11 +1,9 @@
 # go-libraw
-Go bindign for [LibRaw](https://www.libraw.org/)
+Go binding for [LibRaw](https://www.libraw.org/)
 
 ## Background
 I needed a go binding for LibRaw to convert RAW image formats from Nikon and Canon cameras (.NEF, .CR2, ...) to JPEGs or PNGs.
 After doing some searching I only found some older wrappers that have been inactive for a while, so I decided to write my own.
-
-I use MacOS with a M1 Pro chip, so this is only tested (for now) on ARM.
 
 ## Install
 `go get github.com/seppedelanghe/go-libraw@v0.2.0`
@@ -17,7 +15,7 @@ For example, LibRaw's struct uses 0 and 1 to represent boolean values, in the Go
 A custom struct `Box` is also introduced to avoid setting x, y, w, h values in the wrong order as in C, a `[4]uint` array would be used.
 
 ## Building
-When using MacOS with an M1/M2:
+MacOS:
 ```
 brew install libraw
 go build .
