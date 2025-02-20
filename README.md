@@ -23,14 +23,19 @@ brew install libraw
 go build .
 ```
 
-Other OS: (x86/x64 not tested)
-1. Install libraw -> eg. `apt install libraw-dev`
+Ubuntu:
+1. Install libraw -> `apt install libraw-dev`
+2. Run `go build .`
+
+Other:
+1. Install libraw (often called `libraw-dev`)
 2. (optional) Update the `#cgo` flags to point the correct directory for `libraw` 
 3. Run `go build .`
 
 ### Tested on:
 - MacOS 13
 - Ubuntu 24.04 ARM
+- Ubuntu 24.04 x64
 
 ## Tests
 Running tests can be done using `go test -v .`
