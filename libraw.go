@@ -305,6 +305,29 @@ func clearAndClose(proc *C.libraw_data_t, memImg *C.libraw_processed_image_t) {
 	}
 }
 
+// openRaw inits libraw and opens a file
+func openRaw(path string) (*C.libraw_data_t, func(), error) {
+	proc := C.libraw_init(0)
+	if proc == nil {
+		return nil, func() {}, ErrLibrawInit
+	}
+
+	cFile := C.CString(path)
+	defer freeCString(cFile)
+
+	if err := librawErr(C.libraw_open_file(proc, cFile)); err != nil {
+		C.libraw_recycle(proc)
+		C.libraw_close(proc)
+		return nil, func() {}, err
+	}
+
+	cleanup := func() {
+		C.libraw_recycle(proc)
+		C.libraw_close(proc)
+	}
+	return proc, cleanup, nil
+}
+
 // processFile opens the file, unpacks it, processes it, and returns:
 //   - proc: the libraw processor pointer
 //   - memImg: the pointer to the in‑memory image returned by libraw_dcraw_make_mem_image
@@ -312,21 +335,19 @@ func clearAndClose(proc *C.libraw_data_t, memImg *C.libraw_processed_image_t) {
 func (p *Processor) processFile(filepath string) (proc *C.libraw_data_t, memImg *C.libraw_processed_image_t, dataSize C.uint,
 	height, width, bits C.ushort, err error) {
 
-	proc = C.libraw_init(0)
-	if proc == nil {
-		err = fmt.Errorf("failed to initialize libraw")
+	proc, closeProc, err := openRaw(filepath)
+	if err != nil {
 		return
 	}
+
+	defer func() {
+		if err != nil {
+			closeProc()
+		}
+	}()
 
 	proc.params = p.options.Apply(proc.params)
 	defer p.options.Free(proc.params)
-
-	cFile := C.CString(filepath)
-	defer freeCString(cFile)
-
-	if err = librawErr(C.libraw_open_file(proc, cFile)); err != nil {
-		return
-	}
 
 	if err = librawErr(C.libraw_unpack(proc)); err != nil {
 		return
